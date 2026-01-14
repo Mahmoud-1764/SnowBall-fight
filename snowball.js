@@ -25,8 +25,11 @@ let SnowWallVerticalU;
 let SnowWallVerticalM;
 let SnowWallVerticalD;
 let SnowFloor;
+let boxImg;
+let BushesImg;
 let SnowBallImg;
-let PlayerImg;
+let Player1Img;
+let Player2Img;
 
 
 window.onload = function() {
@@ -38,11 +41,15 @@ window.onload = function() {
     loadImages();
     LoadMap();
     update();
+
+    document.addEventListener("keyup", moveplayer1);
+    document.addEventListener("keyup", moveplayer2);
+   
 }
 
 
 //U = SnowWallUp, D = SnowWallDown, L = SnowWallLeft, R = SnowWallRight, B = SnowWallBlock 
-//C = SnowWallCornerLU, E = SnowWallCornerRU, F = SnowWallCornerLD, G = SnowWallCornerRD
+//C = SnowWallCornerLU, E = SnowWallCornerRU, F = SnowWallCornerLD, G = SnowWallCornerRD, X = boximg, b = bushes
 // ' ' = SnowFloor, M = SnowWallHorizontalM, r = SnowWallHorizontalR, l = SnowWallHorizontalL , V = SnowWallVerticalU, v = SnowWallVerticalD, m = SnowWallVerticalM
 
 
@@ -50,19 +57,19 @@ const tileMap = [
     "CUUUUUUUUUUUUUUUUUE",
     "L        m        R",
     "L lr lMr v lMr lr R",
-    "L                 R",
+    "L        2        R",
     "L lr V lMMMr V lr R",
     "L    m       m    R",
     "MMMr mMMr lMMm lMMM",
-    "   B m       m B   ",
+    "   b m       m b   ",
     "MMMr v lMMMr v lMMM",
     "                   ",
     "MMMr V lMMMr V lMMM",
-    "   B m       m B   ",
+    "   b m       m b   ",
     "MMMr v lMMMr v lMMM",
-    "L        m        R",
-    "L BV lMr v lMr VB R",
-    "L  m           m  R",
+    "L                 R",
+    "L XV lMr B lMr VX R",
+    "L  m     1     m  R",
     "L  v V lMMMr V v  R",
     "L    m   m   m    R",
     "L lMMMMr v lMMMMr R",
@@ -71,6 +78,8 @@ const tileMap = [
 ];
 
 const SnowWalls = new Set();
+const boxes = [];
+const players = [];
 
 
 function loadImages() {
@@ -106,10 +115,14 @@ function loadImages() {
     SnowWallVerticalM.src = "assets\\Pngs\\Tiles\\Tile_55.png";
     SnowWallVerticalD = new Image();
     SnowWallVerticalD.src = "assets\\Pngs\\Tiles\\Tile_56.png";
-    // SnowBallImg = new Image();
-    // SnowBallImg.src = "assets\\Pngs\\Items and Blocks\\Snowball.png";
-    // PlayerImg = new Image();
-    // PlayerImg.src = "assets/Pngs/Characters/Player.png";
+    boxImg = new Image();
+    boxImg.src = "assets\\Pngs\\Objects\\Boxes\\3.png";
+    BushesImg1 = new Image();
+    BushesImg1.src = "assets\\Pngs\\Objects\\Bushes\\1.png";
+    Player1Img = new Image();
+    Player1Img.src = "assets\\Pngs\\Char\\Character_1.png";
+    Player2Img = new Image();
+    Player2Img.src = "assets\\Pngs\\Char\\Character_2.png";
 }
 
 function LoadMap() {
@@ -154,6 +167,18 @@ function LoadMap() {
                 SnowWalls.add(new Block(SnowWallVerticalM, x, y, tileSize, tileSize));   
             }else if (tileMapChar === 'v') {
                 SnowWalls.add(new Block(SnowWallVerticalD, x, y, tileSize, tileSize));
+            }else if (tileMapChar === 'X') {
+                SnowWalls.add(new Block(SnowFloor, x, y, tileSize, tileSize));
+                boxes.push(new Block(boxImg, x, y, tileSize, tileSize));
+            }else if (tileMapChar === 'b') {
+                SnowWalls.add(new Block(SnowFloor, x, y, tileSize, tileSize));
+                SnowWalls.add(new Block(BushesImg1, x, y, tileSize, tileSize));
+            }else if (tileMapChar === '1') {
+                SnowWalls.add(new Block(SnowFloor, x, y, tileSize, tileSize));
+                players.push(new Player(Player1Img, x, y, tileSize, tileSize));
+            }else if (tileMapChar === '2') {
+                SnowWalls.add(new Block(SnowFloor, x, y, tileSize, tileSize));
+                players.push(new Player(Player2Img, x, y, tileSize, tileSize));
             }
 
         }
@@ -162,6 +187,9 @@ function LoadMap() {
 
 
 function update() {
+       for (let player of players) {
+        player.move();
+    }
     draw();
     setTimeout(update, 1000 / 60);
 }
@@ -172,13 +200,37 @@ function draw() {
     for (let wall of SnowWalls) {
         context.drawImage(wall.Image, wall.x, wall.y, wall.width, wall.height);
     };
+    for (let box of boxes) {
+        context.drawImage(box.Image, box.x, box.y, box.width, box.height);
+    }
+    for (let player of players) {
+        context.drawImage(player.Image, player.x, player.y, player.width, player.height);
+    }
 }
 
+function moveplayer1(e) {
+    if (e.key === "w") {
+        players[0].updateDirection('up');
+    } else if (e.key === "s") {
+        players[0].updateDirection('down');
+    } else if (e.key === "a") {
+        players[0].updateDirection('left');
+    } else if (e.key === "d") {
+        players[0].updateDirection('right');
+    }
+};
 
-
-
-
-
+function moveplayer2(e) {
+    if (e.key === "ArrowUp" || e.key === "i") {
+        players[1].updateDirection('up');
+    } else if (e.key === "ArrowDown" || e.key === "k") {
+        players[1].updateDirection('down');
+    } else if (e.key === "ArrowLeft" || e.key === "j") {
+        players[1].updateDirection('left');
+    } else if (e.key === "ArrowRight" || e.key === "l") {
+        players[1].updateDirection('right');
+    }
+};
 class Block {
     constructor(Image, x, y, width, height,) {
         this.Image = Image;
@@ -189,5 +241,49 @@ class Block {
 
         this.Startx = x;
         this.Starty = y;
+        
+    }
+}
+
+class Player {
+    constructor(Image, x, y, width, height) {
+        this.Image = Image;
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+
+        this.Startx = x;
+        this.Starty = y;
+
+        this.direction = 'down';
+        this.velocityX = 0;
+        this.velocityY = 0;
+    }
+
+    updateDirection(direction) {
+        this.direction = direction;
+        this.updateVelocity();
+    }
+
+    updateVelocity() {
+        if (this.direction === 'up') {
+            this.velocityX = 0;
+            this.velocityY = -tileSize / 10;
+        } else if (this.direction === 'down') {
+            this.velocityX = 0;
+            this.velocityY = tileSize / 10;
+        } else if (this.direction === 'left') {
+            this.velocityX = -tileSize / 10;
+            this.velocityY = 0;
+        } else if (this.direction === 'right') {
+            this.velocityX = tileSize / 10;
+            this.velocityY = 0;
+        } 
+    }
+
+    move() {
+        this.x += this.velocityX;
+        this.y += this.velocityY;
     }
 }
