@@ -6,6 +6,9 @@ const boardWidth = ColumnCount * tileSize;
 const boardHeight = RowCount * tileSize;
 let context;
 
+// Track which keys are currently pressed
+const keysPressed = {};
+
 
 //images
 
@@ -42,8 +45,14 @@ window.onload = function() {
     LoadMap();
     update();
 
-    document.addEventListener("keyup", moveplayer1);
-    document.addEventListener("keyup", moveplayer2);
+    document.addEventListener("keydown", (e) => {
+        keysPressed[e.key] = true;
+        updatePlayerMovement();
+    });
+    document.addEventListener("keyup", (e) => {
+        keysPressed[e.key] = false;
+        updatePlayerMovement();
+    });
    
 }
 
@@ -78,6 +87,7 @@ const tileMap = [
 ];
 
 const SnowWalls = new Set();
+const walls = []; // Only collidable walls, not floors
 const boxes = [];
 const players = [];
 
@@ -128,6 +138,7 @@ function loadImages() {
 function LoadMap() {
 
     SnowWalls.clear();
+    walls.length = 0;
     for (let i = 0; i < RowCount; i++) {
         for (let j = 0; j < ColumnCount; j++) {
             const row = tileMap[i];
@@ -137,42 +148,59 @@ function LoadMap() {
 
             if (tileMapChar === 'U') {
                 SnowWalls.add(new Block(SnowWallUp, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallUp, x, y, tileSize, tileSize));
             } else if (tileMapChar === 'D') {
                 SnowWalls.add(new Block(SnowWallDown, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallDown, x, y, tileSize, tileSize));
             } else if (tileMapChar === 'L') {
                 SnowWalls.add(new Block(SnowWallLeft, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallLeft, x, y, tileSize, tileSize));
             } else if (tileMapChar === 'R') {
                 SnowWalls.add(new Block(SnowWallRight, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallRight, x, y, tileSize, tileSize));
             } else if (tileMapChar === 'C') {
                 SnowWalls.add(new Block(SnowWallCornerLU, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallCornerLU, x, y, tileSize, tileSize));
             } else if (tileMapChar === 'E') {
                 SnowWalls.add(new Block(SnowWallCornerRU, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallCornerRU, x, y, tileSize, tileSize));
             } else if (tileMapChar === 'F') {
                 SnowWalls.add(new Block(SnowWallCornerLD, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallCornerLD, x, y, tileSize, tileSize));
             } else if (tileMapChar === 'G') {
                 SnowWalls.add(new Block(SnowWallCornerRD, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallCornerRD, x, y, tileSize, tileSize));
             }else if (tileMapChar === ' ') {
                 SnowWalls.add(new Block(SnowFloor, x, y, tileSize, tileSize));
             }else if (tileMapChar === 'B') {
                 SnowWalls.add(new Block(SnowWallBlock, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallBlock, x, y, tileSize, tileSize));
             }else if (tileMapChar === 'r') {
                 SnowWalls.add(new Block(SnowWallHorizontalR, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallHorizontalR, x, y, tileSize, tileSize));
             }else if (tileMapChar === 'l') {
                 SnowWalls.add(new Block(SnowWallHorizontalL, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallHorizontalL, x, y, tileSize, tileSize));
             }else if (tileMapChar === 'M') {
-                SnowWalls.add(new Block(SnowWallHorizontalM, x, y, tileSize, tileSize));   
+                SnowWalls.add(new Block(SnowWallHorizontalM, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallHorizontalM, x, y, tileSize, tileSize));
             }else if (tileMapChar === 'V') {
-                SnowWalls.add(new Block(SnowWallVerticalU, x, y, tileSize, tileSize));   
+                SnowWalls.add(new Block(SnowWallVerticalU, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallVerticalU, x, y, tileSize, tileSize));
             }else if (tileMapChar === 'm') {
-                SnowWalls.add(new Block(SnowWallVerticalM, x, y, tileSize, tileSize));   
+                SnowWalls.add(new Block(SnowWallVerticalM, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallVerticalM, x, y, tileSize, tileSize));
             }else if (tileMapChar === 'v') {
                 SnowWalls.add(new Block(SnowWallVerticalD, x, y, tileSize, tileSize));
+                walls.push(new Block(SnowWallVerticalD, x, y, tileSize, tileSize));
             }else if (tileMapChar === 'X') {
                 SnowWalls.add(new Block(SnowFloor, x, y, tileSize, tileSize));
                 boxes.push(new Block(boxImg, x, y, tileSize, tileSize));
+                walls.push(boxes[boxes.length - 1]);
             }else if (tileMapChar === 'b') {
                 SnowWalls.add(new Block(SnowFloor, x, y, tileSize, tileSize));
                 SnowWalls.add(new Block(BushesImg1, x, y, tileSize, tileSize));
+                walls.push(new Block(BushesImg1, x, y, tileSize, tileSize));
             }else if (tileMapChar === '1') {
                 SnowWalls.add(new Block(SnowFloor, x, y, tileSize, tileSize));
                 players.push(new Player(Player1Img, x, y, tileSize, tileSize));
@@ -208,29 +236,51 @@ function draw() {
     }
 }
 
-function moveplayer1(e) {
-    if (e.key === "w") {
+function updatePlayerMovement() {
+    // Player 1 (WASD)
+    if (keysPressed['w']) {
         players[0].updateDirection('up');
-    } else if (e.key === "s") {
+    } else if (keysPressed['w'] && keysPressed['a']) {
+        players[0].updateDirection('up-left');
+    } else if (keysPressed['w'] && keysPressed['d']) {
+        players[0].updateDirection('up-right');
+    } else if (keysPressed['s']) {
         players[0].updateDirection('down');
-    } else if (e.key === "a") {
+    } else if (keysPressed['s'] && keysPressed['a']) {
+        players[0].updateDirection('down-left');
+    } else if (keysPressed['s'] && keysPressed['d']) {
+        players[0].updateDirection('down-right');
+    } else if (keysPressed['a']) {
         players[0].updateDirection('left');
-    } else if (e.key === "d") {
+    } else if (keysPressed['d']) {
         players[0].updateDirection('right');
+    } else {
+        players[0].updateDirection('none');
     }
+
+   
+    if (keysPressed['ArrowUp'] || keysPressed['i']) {
+        players[1].updateDirection('up');
+    } else if (keysPressed['ArrowDown'] || keysPressed['k']) {
+        players[1].updateDirection('down');
+    } else if (keysPressed['ArrowLeft'] || keysPressed['j']) {
+        players[1].updateDirection('left');
+    } else if (keysPressed['ArrowRight'] || keysPressed['l']) {
+        players[1].updateDirection('right');
+    } else {
+        players[1].updateDirection('none');
+    }
+}
+
+
+function collision(a, b) {
+    return  a.x < b.x + b.width &&
+        a.x + a.width > b.x &&
+        a.y < b.y + b.height &&
+        a.y + a.height > b.y
 };
 
-function moveplayer2(e) {
-    if (e.key === "ArrowUp" || e.key === "i") {
-        players[1].updateDirection('up');
-    } else if (e.key === "ArrowDown" || e.key === "k") {
-        players[1].updateDirection('down');
-    } else if (e.key === "ArrowLeft" || e.key === "j") {
-        players[1].updateDirection('left');
-    } else if (e.key === "ArrowRight" || e.key === "l") {
-        players[1].updateDirection('right');
-    }
-};
+
 class Block {
     constructor(Image, x, y, width, height,) {
         this.Image = Image;
@@ -270,6 +320,18 @@ class Player {
         if (this.direction === 'up') {
             this.velocityX = 0;
             this.velocityY = -tileSize / 10;
+        } else if (this.direction === 'up-left') {
+            this.velocityX = -tileSize / 10;
+            this.velocityY = -tileSize / 10;
+        } else if (this.direction === 'up-right') {
+            this.velocityX = tileSize / 10;
+            this.velocityY = -tileSize / 10;
+        } else if (this.direction === 'down-left') {
+            this.velocityX = -tileSize / 10;
+            this.velocityY = tileSize / 10;
+        } else if (this.direction === 'down-right') {
+            this.velocityX = tileSize / 10;
+            this.velocityY = tileSize / 10;
         } else if (this.direction === 'down') {
             this.velocityX = 0;
             this.velocityY = tileSize / 10;
@@ -279,11 +341,45 @@ class Player {
         } else if (this.direction === 'right') {
             this.velocityX = tileSize / 10;
             this.velocityY = 0;
-        } 
+        } else if (this.direction === 'none') {
+            this.velocityX = 0;
+            this.velocityY = 0;
+        }
     }
 
     move() {
-        this.x += this.velocityX;
-        this.y += this.velocityY;
+        const stepSize = 1; // Smaller steps for smoother collision
+        const stepsX = Math.abs(this.velocityX);
+        const stepsY = Math.abs(this.velocityY);
+        
+        // Move X with smaller steps for better collision detection
+        const dirX = this.velocityX > 0 ? 1 : -1;
+        for (let i = 0; i < stepsX; i++) {
+            this.x += dirX;
+            let collided = false;
+            for (let wall of walls) {
+                if (collision(this, wall)) {
+                    this.x -= dirX;
+                    collided = true;
+                    break;
+                }
+            }
+            if (collided) break;
+        }
+        
+        // Move Y with smaller steps for better collision detection
+        const dirY = this.velocityY > 0 ? 1 : -1;
+        for (let i = 0; i < stepsY; i++) {
+            this.y += dirY;
+            let collided = false;
+            for (let wall of walls) {
+                if (collision(this, wall)) {
+                    this.y -= dirY;
+                    collided = true;
+                    break;
+                }
+            }
+            if (collided) break;
+        }
     }
 }
