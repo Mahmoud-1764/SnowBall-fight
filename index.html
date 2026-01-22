@@ -9,6 +9,39 @@
     </head>
     <body>
         <p id="instructions">Press F (Player 1) or Enter (Player 2) to throw a snowball.</p>
-        <canvas id="board"></canvas>
+        <div id="gameLayout">
+            <canvas id="board"></canvas>
+            <div id="mapControls">
+                <p id="mapHint">Custom map: 21 rows x 19 columns. Use the legend for tile letters.</p>
+                <textarea id="mapInput" rows="10" cols="24" spellcheck="false"></textarea>
+                <div id="mapButtons">
+                    <button id="applyMap" type="button">Apply Map</button>
+                    <button id="resetMap" type="button">Reset Map</button>
+                </div>
+                <div id="mapLegend">
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_05.png" alt="U"><span>U</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_25.png" alt="D"><span>D</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_13.png" alt="L"><span>L</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_16.png" alt="R"><span>R</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_04.png" alt="C"><span>C</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_06.png" alt="E"><span>E</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_24.png" alt="F"><span>F</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_26.png" alt="G"><span>G</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_31.png" alt="B"><span>B</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_34.png" alt="r"><span>r</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_32.png" alt="l"><span>l</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_33.png" alt="M"><span>M</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_54.png" alt="V"><span>V</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_55.png" alt="m"><span>m</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_56.png" alt="v"><span>v</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Objects/Boxes/3.png" alt="X"><span>X</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Objects/Bushes/1.png" alt="b"><span>b</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Char/Character_1.png" alt="1"><span>1</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Char/Character_2.png" alt="2"><span>2</span></div>
+                    <div class="legendItem"><img src="assets/Pngs/Tiles/Tile_12.png" alt="space"><span>space</span></div>
+                </div>
+                <p id="mapStatus"></p>
+            </div>
+        </div>
     </body>
 </html>

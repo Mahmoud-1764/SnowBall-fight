@@ -8,12 +8,29 @@ const targetFrameMs = 1000 / 60;
 const baseSpeed = tileSize / 10;
 const playerHitboxInset = 4;
 const throwCooldownMs = 350;
+const maxPlayerHp = 100;
+const snowballDamage = Math.round(maxPlayerHp * 0.25);
+const roundResetDelayMs = 1200;
+const baseHazardIntervalMs = 1600;
+const minHazardIntervalMs = 350;
+const hazardIntervalDecay = 0.82;
+const baseHazardSpeed = baseSpeed * 2.6;
+const hazardSpeedPerRound = baseSpeed * 0.7;
+const hazardExtraEveryRounds = 3;
+const maxHazardsPerSpawn = 3;
+const hazardLifetimeMs = 4000;
 const snowballRadius = 8;
 const snowballSpeed = baseSpeed * 2;
 const snowballLifetimeMs = 1200;
 let context;
 let lastFrameTime = 0;
 let currentTimeMs = 0;
+let roundNumber = 1;
+let roundEnding = false;
+let roundResetAtMs = 0;
+let nextHazardAtMs = 0;
+let mapInput;
+let mapStatus;
 
 // Track which keys are currently pressed
 const keysPressed = {};
@@ -78,12 +95,15 @@ let Player2ImgUp;
 let Player2ImgDown;
 let Player2ImgLeft;
 let Player2ImgRight;
-let controllerindex = 0;
-let throwkey = false;
-let uppreesed;
-let downpreesed;
-let leftpreesed;
-let rightpreesed;
+const maxControllers = 2;
+const controllerSlots = new Array(maxControllers).fill(null);
+const controllerInputState = Array.from({ length: maxControllers }, () => ({
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+  throw: false,
+}));
 
 function normalizeKey(key) {
   return key.length === 1 ? key.toLowerCase() : key;
@@ -136,7 +156,28 @@ window.onload = function () {
 
   loadImages();
   LoadMap();
+  resetRoundState(performance.now());
   requestAnimationFrame(update);
+
+  mapInput = document.getElementById("mapInput");
+  mapStatus = document.getElementById("mapStatus");
+  const applyMapButton = document.getElementById("applyMap");
+  const resetMapButton = document.getElementById("resetMap");
+  if (mapInput) {
+    mapInput.value = defaultTileMap.join("\n");
+  }
+  if (applyMapButton) {
+    applyMapButton.addEventListener("click", () => {
+      const nowMs = currentTimeMs || performance.now();
+      applyCustomMap(mapInput ? mapInput.value : "", nowMs);
+    });
+  }
+  if (resetMapButton) {
+    resetMapButton.addEventListener("click", () => {
+      const nowMs = currentTimeMs || performance.now();
+      resetToDefaultMap(nowMs);
+    });
+  }
 
   document.addEventListener("keydown", (e) => {
     const key = normalizeKey(e.key);
@@ -166,7 +207,13 @@ window.onload = function () {
       e.gamepad.buttons.length,
       e.gamepad.axes.length
     );
-    controllerindex = e.gamepad.index;
+    if (!controllerSlots.includes(e.gamepad.index)) {
+      const slot = controllerSlots.indexOf(null);
+      if (slot !== -1) {
+        controllerSlots[slot] = e.gamepad.index;
+        console.log("Assigned controller %d to player %d.", e.gamepad.index, slot + 1);
+      }
+    }
   });
 
   window.addEventListener("gamepaddisconnected", (e) => {
@@ -175,7 +222,17 @@ window.onload = function () {
       e.gamepad.index,
       e.gamepad.id
     );
-    controllerindex = null;
+    const slot = controllerSlots.indexOf(e.gamepad.index);
+    if (slot !== -1) {
+      controllerSlots[slot] = null;
+      controllerInputState[slot] = {
+        up: false,
+        down: false,
+        left: false,
+        right: false,
+        throw: false,
+      };
+    }
   });
 };
 
@@ -183,7 +240,7 @@ window.onload = function () {
 //C = SnowWallCornerLU, E = SnowWallCornerRU, F = SnowWallCornerLD, G = SnowWallCornerRD, X = boximg, b = bushes
 // ' ' = SnowFloor, M = SnowWallHorizontalM, r = SnowWallHorizontalR, l = SnowWallHorizontalL , V = SnowWallVerticalU, v = SnowWallVerticalD, m = SnowWallVerticalM
 
-const tileMap = [
+const defaultTileMap = [
   "CUUUUUUUUUUUUUUUUUE",
   "L        m        R",
   "L lr lMr v lMr lr R",
@@ -206,6 +263,30 @@ const tileMap = [
   "L                 R",
   "FDDDDDDDDDDDDDDDDDG",
 ];
+
+let activeTileMap = defaultTileMap.slice();
+const allowedTileChars = new Set([
+  "U",
+  "D",
+  "L",
+  "R",
+  "C",
+  "E",
+  "F",
+  "G",
+  "B",
+  "r",
+  "l",
+  "M",
+  "V",
+  "m",
+  "v",
+  "X",
+  "b",
+  "1",
+  "2",
+  " ",
+]);
 
 const SnowWalls = new Set();
 const walls = []; // Only collidable walls, not floors
@@ -287,7 +368,7 @@ function LoadMap() {
   players.length = 0;
   for (let i = 0; i < RowCount; i++) {
     for (let j = 0; j < ColumnCount; j++) {
-      const row = tileMap[i];
+      const row = activeTileMap[i];
       const tileMapChar = row[j];
       const x = j * tileSize;
       const y = i * tileSize;
@@ -341,6 +422,7 @@ function LoadMap() {
             Player1ImgDown,
             Player1ImgLeft,
             Player1ImgRight,
+            0,
             x,
             y,
             tileSize,
@@ -356,6 +438,7 @@ function LoadMap() {
             Player2ImgDown,
             Player2ImgLeft,
             Player2ImgRight,
+            1,
             x,
             y,
             tileSize,
@@ -365,6 +448,97 @@ function LoadMap() {
       }
     }
   }
+}
+
+function normalizeMapLines(lines) {
+  if (lines.length > RowCount) {
+    return { ok: false, error: `Map has ${lines.length} rows, needs ${RowCount}.` };
+  }
+
+  const normalized = lines.slice(0, RowCount);
+  while (normalized.length < RowCount) {
+    normalized.push("");
+  }
+
+  for (let i = 0; i < normalized.length; i++) {
+    if (normalized[i].length > ColumnCount) {
+      return {
+        ok: false,
+        error: `Row ${i + 1} has ${normalized[i].length} columns, needs ${ColumnCount}.`,
+      };
+    }
+    normalized[i] = normalized[i].padEnd(ColumnCount, " ");
+  }
+
+  return { ok: true, map: normalized };
+}
+
+function parseCustomMap(text) {
+  const rawLines = text.replace(/\r/g, "").split("\n");
+  if (rawLines.length > 0 && rawLines[rawLines.length - 1] === "") {
+    rawLines.pop();
+  }
+  if (rawLines.length === 0) {
+    return { ok: false, error: "Map is empty." };
+  }
+
+  const normalizedResult = normalizeMapLines(rawLines);
+  if (!normalizedResult.ok) {
+    return normalizedResult;
+  }
+
+  let player1Count = 0;
+  let player2Count = 0;
+  for (const row of normalizedResult.map) {
+    for (const char of row) {
+      if (!allowedTileChars.has(char)) {
+        return { ok: false, error: `Invalid tile '${char}'.` };
+      }
+      if (char === "1") player1Count += 1;
+      if (char === "2") player2Count += 1;
+    }
+  }
+
+  if (player1Count === 0 || player2Count === 0) {
+    return { ok: false, error: "Map must include both player tiles: 1 and 2." };
+  }
+
+  return { ok: true, map: normalizedResult.map };
+}
+
+function setMapStatus(message, isError) {
+  if (!mapStatus) {
+    return;
+  }
+  mapStatus.textContent = message;
+  mapStatus.style.color = isError ? "#f88" : "#9f9";
+}
+
+function applyCustomMap(text, nowMs) {
+  const result = parseCustomMap(text);
+  if (!result.ok) {
+    setMapStatus(result.error, true);
+    return;
+  }
+
+  activeTileMap = result.map;
+  LoadMap();
+  snowballs.length = 0;
+  roundNumber = 1;
+  resetRoundState(nowMs);
+  setMapStatus("Custom map loaded.", false);
+}
+
+function resetToDefaultMap(nowMs) {
+  activeTileMap = defaultTileMap.slice();
+  LoadMap();
+  snowballs.length = 0;
+  roundNumber = 1;
+  resetRoundState(nowMs);
+  if (mapInput) {
+    mapInput.value = defaultTileMap.join("\n");
+  }
+  setMapStatus("Default map loaded.", false);
 }
 
 function throwSnowball(player, nowMs) {
@@ -387,64 +561,135 @@ function throwSnowball(player, nowMs) {
     snowballRadius,
     speedX,
     speedY,
-    nowMs
+    nowMs,
+    player.id,
+    snowballLifetimeMs,
+    false
   );
   snowballs.push(snowball);
 }
 
+function getHazardIntervalMs() {
+  const scaled = baseHazardIntervalMs * Math.pow(hazardIntervalDecay, roundNumber - 1);
+  const jitter = 0.85 + Math.random() * 0.3;
+  return Math.max(minHazardIntervalMs, scaled * jitter);
+}
+
+function getHazardSpeed() {
+  return baseHazardSpeed + (roundNumber - 1) * hazardSpeedPerRound;
+}
+
+function spawnHazardSnowball(nowMs) {
+  const x = snowballRadius + Math.random() * (boardWidth - snowballRadius * 2);
+  const y = -snowballRadius;
+  const speedY = getHazardSpeed();
+  const hazard = new SnowBall(
+    SnowBallImg,
+    x,
+    y,
+    snowballRadius,
+    0,
+    speedY,
+    nowMs,
+    null,
+    hazardLifetimeMs,
+    true
+  );
+  snowballs.push(hazard);
+}
+
+function updateHazardSpawns(nowMs) {
+  if (roundEnding) {
+    return;
+  }
+  if (nowMs >= nextHazardAtMs) {
+    const extraHazards = Math.min(
+      maxHazardsPerSpawn - 1,
+      Math.floor((roundNumber - 1) / hazardExtraEveryRounds)
+    );
+    const count = 1 + extraHazards;
+    for (let i = 0; i < count; i++) {
+      spawnHazardSnowball(nowMs);
+    }
+    nextHazardAtMs = nowMs + getHazardIntervalMs();
+  }
+}
+
+function resetRoundState(nowMs) {
+  roundEnding = false;
+  roundResetAtMs = 0;
+  nextHazardAtMs = nowMs + getHazardIntervalMs();
+}
+
+function applyDeadzone(value, deadzone) {
+  return Math.abs(value) < deadzone ? 0 : value;
+}
+
 function controllerInput() {
-  if (controllerindex !== null) {
-    const gamepads = navigator.getGamepads()[controllerindex];
-    const buttons = gamepads.buttons;
-    const axes = gamepads.axes;
+  const gamepads = navigator.getGamepads();
+  const deadzone = 0.2;
 
-    const deadzone = 0.2;
-
-    for (let i = 0; i < axes.length; i++) {
-      if (Math.abs(axes[i]) < deadzone) {
-        axes[i] = 0;
-      }
+  for (let i = 0; i < controllerSlots.length; i++) {
+    const index = controllerSlots[i];
+    if (index === null) {
+      continue;
+    }
+    const gamepad = gamepads[index];
+    if (!gamepad) {
+      continue;
     }
 
-    uppreesed = buttons[12].pressed || axes[1] < -0.5;
-    downpreesed = buttons[13].pressed || axes[1] > 0.5;
-    leftpreesed = buttons[14].pressed || axes[0] < -0.5;
-    rightpreesed = buttons[15].pressed || axes[0] > 0.5;
+    const axes = gamepad.axes || [];
+    const buttons = gamepad.buttons || [];
+    const axisX = applyDeadzone(axes[0] || 0, deadzone);
+    const axisY = applyDeadzone(axes[1] || 0, deadzone);
 
-    throwkey = buttons[0].pressed;
-    console.log(gamepads);
+    controllerInputState[i] = {
+      up: (buttons[12] && buttons[12].pressed) || axisY < -0.5,
+      down: (buttons[13] && buttons[13].pressed) || axisY > 0.5,
+      left: (buttons[14] && buttons[14].pressed) || axisX < -0.5,
+      right: (buttons[15] && buttons[15].pressed) || axisX > 0.5,
+      throw: (buttons[0] && buttons[0].pressed) || false,
+    };
   }
 }
 
 function updateControllerMovement() {
-  if (controllerindex === null) return;
+  const nowMs = currentTimeMs || performance.now();
 
-  const player = players[0]; // Assuming single player for controller
-  let direction = "none";
+  for (let i = 0; i < controllerSlots.length; i++) {
+    const index = controllerSlots[i];
+    const player = players[i];
+    if (index === null || !player) {
+      continue;
+    }
 
-  if (uppreesed && leftpreesed) {
-    direction = "up-left";
-  } else if (uppreesed && rightpreesed) {
-    direction = "up-right";
-  } else if (downpreesed && leftpreesed) {
-    direction = "down-left";
-  } else if (downpreesed && rightpreesed) {
-    direction = "down-right";
-  } else if (uppreesed) {
-    direction = "up";
-  } else if (downpreesed) {
-    direction = "down";
-  } else if (leftpreesed) {
-    direction = "left";
-  } else if (rightpreesed) {
-    direction = "right";
-  }
+    const input = controllerInputState[i];
+    let direction = "none";
 
-  player.updateDirection(direction);
+    if (input.up && input.left) {
+      direction = "up-left";
+    } else if (input.up && input.right) {
+      direction = "up-right";
+    } else if (input.down && input.left) {
+      direction = "down-left";
+    } else if (input.down && input.right) {
+      direction = "down-right";
+    } else if (input.up) {
+      direction = "up";
+    } else if (input.down) {
+      direction = "down";
+    } else if (input.left) {
+      direction = "left";
+    } else if (input.right) {
+      direction = "right";
+    }
 
-  if (throwkey) {
-    const nowMs = currentTimeMs || performance.now();
-    tryThrow(player, nowMs);
+    player.updateDirection(direction);
+
+    if (input.throw) {
+      tryThrow(player, nowMs);
+    }
   }
 }
 
@@ -462,6 +707,8 @@ function update(timestamp) {
   }
 
   updateSnowballs(deltaFactor, timestamp);
+  updateHazardSpawns(timestamp);
+  checkRoundEnd(timestamp);
   draw();
   requestAnimationFrame(update);
   controllerInput();
@@ -472,6 +719,22 @@ function updateSnowballs(deltaFactor, nowMs) {
   for (let snowball of snowballs) {
     if (snowball.active) {
       snowball.move(deltaFactor, nowMs);
+    }
+    if (!snowball.active) {
+      continue;
+    }
+    for (let player of players) {
+      if (!player || !player.isAlive()) {
+        continue;
+      }
+      if (player.id === snowball.ownerId) {
+        continue;
+      }
+      if (snowball.collidesWith(player.getHitbox())) {
+        player.takeDamage(snowballDamage);
+        snowball.active = false;
+        break;
+      }
     }
   }
 
@@ -511,6 +774,33 @@ function draw() {
       );
     }
   }
+
+  drawHud();
+}
+
+function drawHud() {
+  context.save();
+  context.font = "16px Arial";
+  context.fillStyle = "white";
+  context.textBaseline = "top";
+
+  context.textAlign = "center";
+  context.fillText(`Round ${roundNumber}`, boardWidth / 2, 8);
+
+  if (players[0]) {
+    context.textAlign = "left";
+    context.fillText(`P1 HP: ${players[0].health}`, 8, 8);
+  }
+  if (players[1]) {
+    context.textAlign = "right";
+    context.fillText(`P2 HP: ${players[1].health}`, boardWidth - 8, 8);
+  }
+  if (roundEnding) {
+    context.textAlign = "center";
+    context.fillText("Next round...", boardWidth / 2, 28);
+  }
+
+  context.restore();
 }
 
 function updatePlayerMovement() {
@@ -539,11 +829,40 @@ function handleThrowInput(key) {
 }
 
 function tryThrow(player, nowMs) {
+  if (!player.isAlive()) {
+    return;
+  }
   if (!player.canThrow(nowMs)) {
     return;
   }
   throwSnowball(player, nowMs);
   player.recordThrow(nowMs);
+}
+
+function checkRoundEnd(nowMs) {
+  if (roundEnding) {
+    if (nowMs >= roundResetAtMs) {
+      advanceRound(nowMs);
+    }
+    return;
+  }
+
+  const someoneDown = players.some((player) => player && !player.isAlive());
+  if (someoneDown) {
+    roundEnding = true;
+    roundResetAtMs = nowMs + roundResetDelayMs;
+  }
+}
+
+function advanceRound(nowMs) {
+  roundNumber += 1;
+  for (let player of players) {
+    if (player) {
+      player.resetForRound();
+    }
+  }
+  snowballs.length = 0;
+  resetRoundState(nowMs);
 }
 
 function collision(a, b) {
@@ -575,6 +894,7 @@ class Player {
     Imagedown,
     Imageleft,
     ImageRight,
+    id,
     x,
     y,
     width,
@@ -585,6 +905,7 @@ class Player {
     this.Imagedown = Imagedown;
     this.Imageleft = Imageleft;
     this.ImageRight = ImageRight;
+    this.id = id;
     this.x = x;
     this.y = y;
     this.width = width;
@@ -598,9 +919,15 @@ class Player {
     this.velocityX = 0;
     this.velocityY = 0;
     this.lastThrowTime = -Infinity;
+    this.health = maxPlayerHp;
   }
 
   updateDirection(direction) {
+    if (!this.isAlive()) {
+      this.direction = "none";
+      this.updateVelocity();
+      return;
+    }
     if (direction !== "none") {
       this.direction = direction;
       this.facingDirection = direction;
@@ -634,6 +961,30 @@ class Player {
     const velocity = getDirectionVelocity(this.direction, baseSpeed);
     this.velocityX = velocity.x;
     this.velocityY = velocity.y;
+  }
+
+  resetForRound() {
+    this.x = this.Startx;
+    this.y = this.Starty;
+    this.direction = "down";
+    this.facingDirection = "down";
+    this.velocityX = 0;
+    this.velocityY = 0;
+    this.health = maxPlayerHp;
+    this.updateImage();
+  }
+
+  isAlive() {
+    return this.health > 0;
+  }
+
+  takeDamage(amount) {
+    this.health = Math.max(0, this.health - amount);
+    if (!this.isAlive()) {
+      this.direction = "none";
+      this.velocityX = 0;
+      this.velocityY = 0;
+    }
   }
 
   canThrow(nowMs) {
@@ -688,7 +1039,18 @@ class Player {
 }
 
 class SnowBall {
-  constructor(Image, x, y, radius, speedX, speedY, spawnTimeMs) {
+  constructor(
+    Image,
+    x,
+    y,
+    radius,
+    speedX,
+    speedY,
+    spawnTimeMs,
+    ownerId,
+    lifetimeMs = snowballLifetimeMs,
+    ignoresWalls = false
+  ) {
     this.Image = Image;
     this.x = x;
     this.y = y;
@@ -696,8 +1058,10 @@ class SnowBall {
     this.speedX = speedX;
     this.speedY = speedY;
     this.spawnTimeMs = spawnTimeMs;
-    this.lifetimeMs = snowballLifetimeMs;
+    this.lifetimeMs = lifetimeMs;
     this.active = true;
+    this.ownerId = ownerId;
+    this.ignoresWalls = ignoresWalls;
   }
 
   move(deltaFactor = 1, nowMs = 0) {
@@ -722,10 +1086,12 @@ class SnowBall {
     }
 
     // Check for collisions with walls
-    for (let wall of walls) {
-      if (this.collidesWith(wall)) {
-        this.active = false; // Deactivate the snowball on collision
-        break;
+    if (!this.ignoresWalls) {
+      for (let wall of walls) {
+        if (this.collidesWith(wall)) {
+          this.active = false; // Deactivate the snowball on collision
+          break;
+        }
       }
     }
   }
