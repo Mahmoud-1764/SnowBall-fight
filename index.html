@@ -8,11 +8,12 @@
         <script src="snowball.js"></script>
     </head>
     <body>
-        <p id="instructions">Press F (Player 1) or Enter (Player 2) to throw a snowball.</p>
+        <p id="instructions">Press any key to start. P to pause. F (P1) / Enter (P2) to throw.</p>
         <div id="gameLayout">
             <canvas id="board"></canvas>
             <div id="mapControls">
                 <p id="mapHint">Custom map: 21 rows x 19 columns. Use the legend for tile letters.</p>
+                <p id="mapMetrics"></p>
                 <textarea id="mapInput" rows="10" cols="24" spellcheck="false"></textarea>
                 <div id="mapButtons">
                     <button id="applyMap" type="button">Apply Map</button>
